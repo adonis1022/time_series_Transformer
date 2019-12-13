@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[2]:
+
 
 
 from keras.layers import Input,Dense,Embedding,Lambda,TimeDistributed,LSTM, Reshape, Dropout
@@ -30,20 +30,20 @@ import math
 
 # In[3]:
 
-
-sku_id = 32194
+skulst = [30851, 59546, 32194, 31621, 48341]
+#sku_id = 32194
 n_in = 12
 n_out = 6
 n_test = 8
 scaler = MinMaxScaler(feature_range=(0.02, 1))
-file_name = 'data/sku_day_20191023_v2.csv'
+file_name = 'data/sku_buc_day_20191210.csv'
 
 
 # In[3]:
 
 
 #data load
-def load_data(file_name):
+def load_data(file_name, sku_id):
 
     df = pd.read_csv(file_name)
     data_beer = df[df["sku_id"] == sku_id].copy()
@@ -119,16 +119,10 @@ def data_split(data):
 # In[4]:
 
 
-data_beer_week = load_data(file_name)
-data_beer_week = minmaxscaler(data_beer_week)
-data_beer_week = drop_outlier(data_beer_week)
-x_train, x_test, y_train, y_test = data_split(data_beer_week)
 
 
-# In[17]:
 
 
-#x_train[2]
 
 
 # In[5]:
@@ -203,9 +197,10 @@ def model_fit(x_train, y_train):
     
     def objective(space): # Backtest return loss
         #count = 0
-        metric = list()
-        error = []
-        sum_volumn = []
+        #metric = list()
+        #error = []
+        #sum_volumn = []
+        cusloss = []
         for index in range(len(x_train)//2, len(x_train),20):  # 
             
             data_x = x_train[0:index,]
@@ -228,28 +223,29 @@ def model_fit(x_train, y_train):
             
             model.compile(optimizer=Nadam(), loss = custom_loss_acc)
             model.fit(x_train_set,y_train_set, epochs=200, verbose=0)
-            model.evaluate(x_test_set, y_test_set)
+            custom_loss = model.evaluate(x_test_set, y_test_set)
+            cusloss.append(custom_loss)
             # fit into attention 
             #calculate metric
-            e,s = get_metrix_second(model, x_test_set, y_test_set)
-            print(e,s)
-            error.append(e)
-            sum_volumn.append(s)
-            acc = get_acc(model, x_test_set, y_test_set)
-            loss = 1 - acc
-            metric.append(loss)
+            #e,s = get_metrix_second(model, x_test_set, y_test_set)
+            #print(e,s)
+            #error.append(e)
+
+            #sum_volumn.append(s)
+            #acc = get_acc(model, x_test_set, y_test_set)
+            #loss = 1 - acc
+            #metric.append(loss)
             K.clear_session()
         
         
-        print(np.sum(error), np.sum(sum_volumn))
-        print(np.sum(error)/np.sum(sum_volumn))
-        ave = np.mean(metric)
+        #print(np.sum(error), np.sum(sum_volumn))
+        #print(np.sum(error)/np.sum(sum_volumn))
+        #ave = np.mean(metric)
         
-        print('acc',ave)
-        #Memory collect
-        #n = gc.collect()
-        #print('Unreachable objects:', n)
-        return{'loss': np.sum(error)/np.sum(sum_volumn), 'status': STATUS_OK }
+        #print('acc',ave)
+        #return{'loss': np.sum(error)/np.sum(sum_volumn), 'status': STATUS_OK }
+        return{'loss': np.mean(cusloss), 'status': STATUS_OK }
+
 
     space = {
             'heads':            hp.quniform('heads', 1, 5, 1),
@@ -338,39 +334,58 @@ def get_predict(space, x_train, x_test, y_train, y_test):
     model.compile(optimizer=Nadam(), loss=custom_loss_acc)
     model.fit(x_train,y_train, epochs=200, verbose=0)
     e,s = get_metrix_second(model, x_test, y_test)
-    acc = get_acc(model, x_test, y_test)
+    #acc = get_acc(model, x_test, y_test)
     print(e,s,1-e/s)
-    print('acc:',acc)
-    return 1-e/s,acc
+    fitted = model.predict(x_train)
+    pre = model.predict(x_test)
+
+    #print('acc:',acc)
+    #return 1-e/s,acc
+    return fitted, pre, 1-e/s
 
 
 # In[16]:
+for sku_id in skulst:
+    output = dict()
+    output['SKU'] = sku_id
+    data_beer_week = load_data(file_name, sku_id)
+    data_beer_week = minmaxscaler(data_beer_week)
+    data_beer_week = drop_outlier(data_beer_week)
+    x_train, x_test, y_train, y_test = data_split(data_beer_week)
+
+    best = model_fit(x_train, y_train)
+    # pre,y_test = get_predict(best, x_train, x_test, y_train, y_test)
+    # print(pre, y_test)
+    print('best param: ')
+    print(best)
+    output['best_param'] = best
 
 
-best = model_fit(x_train, y_train)
-# pre,y_test = get_predict(best, x_train, x_test, y_train, y_test)
-# print(pre, y_test)
-print('best param: ')
-print(best)
+    fitted, pre, err= get_predict(best, x_train, x_test, y_train, y_test)
+    print('data:')
+    print(y_train, fitted, y_test, pre)
+    print('1-e/s:')
+    print(err)
+
+    output['y_train'] = y_train
+    output['fitted'] = fitted
+    output['y_test'] = y_test
+    output['pre'] = pre
+    output['1-error'] = err
+
+    with open('./output/'+str(sku_id)+'output.pkl','wb') as f:
+        pickle.dump(output, f)
+    print('SKU '+str(sku_id)+' finished')
+    # In[8]:
+print('All done!!')
 
 
-# In[14]:
-
-
-pre,y_test = get_predict(best, x_train, x_test, y_train, y_test)
-print('predict')
-print(pre, y_test)
-
-
-# In[8]:
-
-
-#hp.quniform('test',1,5,1)
+    #hp.quniform('test',1,5,1)
 
 
 # In[ ]:
 '''
-Loss: MAPE
+Loss: MAPE 间隔20
 best param: 
 {'heads': 2.0, 'hidden_dim': 175.0, 'positional_ff_dim': 384.0}
 1961.5093 5778.432000000001
@@ -379,7 +394,7 @@ acc: 0.6090572345364561
 predict
 0.3394535537224891 0.6090572345364561
 
-Loss: custom_loss
+Loss: custom_loss 间隔20
 best param: 
 {'dropout_rate': 0.36326657717914684, 'heads': 4.0, 'hidden_dim': 150.0, 'positional_ff_dim': 512.0}
 2739.0635 5778.432000000001
@@ -387,6 +402,15 @@ best param:
 acc: 0.49223030352657793
 predict
 0.4740150055521116 0.49223030352657793
+
+Loss: custom_loss 间隔4
+best param: 
+{'dropout_rate': 0.12203359553438016, 'heads': 5.0, 'hidden_dim': 175.0, 'positional_ff_dim': 384.0}
+2373.6853 5778.432000000001
+3404.7466972656257 5778.432000000001 0.41078363520317873
+acc: 0.5330540936426007
+predict
+0.41078363520317873 0.5330540936426007
 '''
 
 
