@@ -1,2 +1,3 @@
 # time_series_Transformer
-This project use Transformer to build a time series prediction model.
+This project uses Transformer to build a time series prediction model.
+Some code refers to shashwattrivedi's job. https://github.com/shashwattrivedi/Simple-TransformerEncoder-keras
